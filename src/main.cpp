@@ -180,7 +180,7 @@ void setup()
     ESP_LOGI("setup", "Backlight on");
 
     // print all definitions:
-    tft.print("Xerxes display v1.0.0\n");
+    tft.printf("Xerxes display %s\n", __VERSION);
     tft.printf("Monitor speed: %d\n", __MONITOR_SPEED);
     tft.printf("Xerxes baud: %d\n", __XERXES_BAUD_RATE);
     tft.printf("Xerxes timeout: %dus\n", _XERXES_TIMEOUT_US);
