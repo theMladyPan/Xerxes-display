@@ -187,22 +187,13 @@ void setup()
 
     // print all definitions:
     tft.print("Xerxes display ");
-    tft.print(String(__VERSION));
+    tft.println(String(__VERSION));
     tft.printf("Monitor speed: %d\n", __MONITOR_SPEED);
     tft.printf("Xerxes baud: %d\n", __XERXES_BAUD_RATE);
     tft.printf("Xerxes timeout: %dus\n", _XERXES_TIMEOUT_US);
     tft.printf("CPU freq: %dMHz\n", ESP.getCpuFreqMHz());
     tft.printf("Battery voltage: %dmV\n\n", v1);
-    delay(1000);
-
-    /*
-    // wait for button press
-    tft.print("Press button to start");
-    while (digitalRead(PIN_BUTTON_1) == HIGH)
-    {
-        delay(10);
-    }
-    */
+    delay(2000);
 
     discoverXerxesDevices(devices, 0x00, 0x1F);
 }
