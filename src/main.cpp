@@ -4,7 +4,30 @@
 #include "pin_config.h"
 // include logging library
 #include "esp32-hal-log.h"
-#include <User_Setups/Setup206_LilyGo_T_Display_S3.h> // For the LilyGo T-Display S3 based ESP32S3 with ST7789 170 x 320 TFT
+#include "stdlib.h"
+#include <numeric>
+#include <algorithm>
+#include <map>
+
+#include "DeviceIds.h"
+#include "Protocol.hpp"
+#include "EspUart.hpp"
+#include "MessageId.h"
+#include "Master.hpp"
+#include "Leaf.hpp"
+#include "MemoryMap.h"
+
+#if CORE_DEBUG_LEVEL > 1
+#define _XERXES_TIMEOUT_US 1e9 / __XERXES_BAUD_RATE + 1e4
+#else
+#define _XERXES_TIMEOUT_US 1e9 / __XERXES_BAUD_RATE
+#endif
+
+constexpr uint8_t _pin_tx = 17;
+constexpr uint8_t _pin_rx = 18;
+auto xn = Xerxes::EspUart(_pin_tx, _pin_rx);
+auto xp = Xerxes::Protocol(&xn);
+auto master = Xerxes::Master(&xp, 0xFE, _XERXES_TIMEOUT_US);
 
 /* The product now has two screens, and the initialization code needs a small change in the new version. The LCD_MODULE_CMD_1 is used to define the
  * switch macro. */
@@ -42,6 +65,56 @@ lcd_cmd_t lcd_st7789v[] = {
     {0xE1, {0XF0, 0X08, 0X0C, 0X0B, 0X09, 0X24, 0X2B, 0X22, 0X43, 0X38, 0X15, 0X16, 0X2F, 0X37}, 14},
 };
 #endif
+
+auto devices = std::vector<uint8_t>();
+
+int discoverXerxesDevices(std::vector<uint8_t> &devices, uint8_t range_min = 0, uint8_t range_max = 0x1F)
+{
+    int ret = 0;
+    ping_reply_t ping_reply;
+
+    // create vector to store all adresses
+    std::vector<uint8_t> adresses(range_max - range_min + 1);
+
+    // fill vector with all adresses to be pinged
+    std::iota(adresses.begin(), adresses.end(), range_min);
+
+    // try to ping all devices
+    for (auto &j : adresses)
+    {
+        // skip if already found device
+        if (std::find(devices.begin(), devices.end(), j) != devices.end())
+        {
+            ESP_LOGD("main", "Skipping device with address: %d, already found", j);
+            continue;
+        }
+
+        try
+        {
+            xn.flush();
+            ping_reply = master.ping(j);
+            devices.push_back(j);
+            ESP_LOGI("main", "Found device with id: %d, latency: %.1fms, address: %d", ping_reply.device_id, ping_reply.latency_ms, j);
+            tft.print("Found device with id: ");
+            tft.print(ping_reply.device_id);
+            tft.print(", latency: ");
+            tft.print(ping_reply.latency_ms);
+
+            ret++;
+        }
+        catch (const Xerxes::TimeoutError &e)
+        {
+            // this is expected if device is not responding
+            ESP_LOGD("main", "Timeout while pinging device with address: %d", j);
+        }
+        catch (const std::exception &e)
+        {
+            // this is unexpected
+            ESP_LOGE("main", "Error while pinging device with address: %d, %s", j, e.what());
+        }
+    }
+    return ret;
+}
 
 void setup()
 {
@@ -82,6 +155,30 @@ void setup()
     ledcAttachPin(PIN_LCD_BL, 0);
     ledcWrite(0, 255);
     ESP_LOGI("setup", "Backlight on");
+
+    // print all definitions:
+    tft.print("Xerxes display v1.0.0");
+    tft.print("Monitor speed: ");
+    tft.print(__MONITOR_SPEED);
+    tft.print("\n");
+    tft.print("Xerxes baud: ");
+    tft.print(__XERXES_BAUD_RATE);
+    tft.print("\n");
+    tft.print("Xerxes timeout: ");
+    tft.print(_XERXES_TIMEOUT_US);
+    tft.print("us\n");
+    tft.print("CPU freq: ");
+    tft.print(ESP.getCpuFreqMHz());
+    tft.print("MHz\n");
+
+    // wait for button press
+    tft.print("Press button to start");
+    while (digitalRead(PIN_BUTTON_1) == HIGH)
+    {
+        delay(10);
+    }
+
+    discoverXerxesDevices(devices, 0x00, 0x1F);
 }
 
 void loop()
