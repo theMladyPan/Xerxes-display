@@ -18,10 +18,12 @@
 #include "MemoryMap.h"
 
 #if CORE_DEBUG_LEVEL > 1
-#define _XERXES_TIMEOUT_US 1e9 / __XERXES_BAUD_RATE + 1e4
+constexpr uint32_t _XERXES_TIMEOUT_US = (1e9 / __XERXES_BAUD_RATE) + 2e4;
 #else
-#define _XERXES_TIMEOUT_US 1e9 / __XERXES_BAUD_RATE
+constexpr uint32_t _XERXES_TIMEOUT_US = (1e9 / __XERXES_BAUD_RATE);
 #endif
+
+#define _FONT_SIZE 4
 
 constexpr uint8_t _pin_tx = 17;
 constexpr uint8_t _pin_rx = 18;
@@ -70,7 +72,7 @@ auto devices = std::vector<uint8_t>();
 
 int discoverXerxesDevices(std::vector<uint8_t> &devices, uint8_t range_min = 0, uint8_t range_max = 0x1F)
 {
-    int ret = 0;
+    int ret = 0; // amount of devices found
     ping_reply_t ping_reply;
 
     // create vector to store all adresses
@@ -78,6 +80,7 @@ int discoverXerxesDevices(std::vector<uint8_t> &devices, uint8_t range_min = 0, 
 
     // fill vector with all adresses to be pinged
     std::iota(adresses.begin(), adresses.end(), range_min);
+    tft.print("Discovering devices...\n");
 
     // try to ping all devices
     for (auto &j : adresses)
@@ -92,14 +95,10 @@ int discoverXerxesDevices(std::vector<uint8_t> &devices, uint8_t range_min = 0, 
         try
         {
             xn.flush();
+            tft.printf("%d, ", j);
             ping_reply = master.ping(j);
             devices.push_back(j);
             ESP_LOGI("main", "Found device with id: %d, latency: %.1fms, address: %d", ping_reply.device_id, ping_reply.latency_ms, j);
-            tft.print("Found device with id: ");
-            tft.print(ping_reply.device_id);
-            tft.print(", latency: ");
-            tft.print(ping_reply.latency_ms);
-
             ret++;
         }
         catch (const Xerxes::TimeoutError &e)
@@ -114,6 +113,30 @@ int discoverXerxesDevices(std::vector<uint8_t> &devices, uint8_t range_min = 0, 
         }
     }
     return ret;
+}
+
+/**
+ * @brief Read data from leaf and return it as float
+ *
+ * @param _dst destination variable
+ * @param addr leaf's address
+ * @param offset offset of the value to read
+ * @return true if read was successful
+ * @return false if read failed
+ */
+bool readSafe(float &_dst, const uint8_t addr, const uint16_t offset)
+{
+    try
+    {
+        _dst = master.readValue<float>(addr, offset);
+        ESP_LOGI("main", "Address[offset] - %d[%d]: %.2f ", addr, offset, _dst);
+        return true;
+    }
+    catch (const std::exception &e)
+    {
+        ESP_LOGW("main", "Error while reading value from device with address: %d, %s", addr, e.what());
+        return false;
+    }
 }
 
 void setup()
@@ -157,61 +180,69 @@ void setup()
     ESP_LOGI("setup", "Backlight on");
 
     // print all definitions:
-    tft.print("Xerxes display v1.0.0");
-    tft.print("Monitor speed: ");
-    tft.print(__MONITOR_SPEED);
-    tft.print("\n");
-    tft.print("Xerxes baud: ");
-    tft.print(__XERXES_BAUD_RATE);
-    tft.print("\n");
-    tft.print("Xerxes timeout: ");
-    tft.print(_XERXES_TIMEOUT_US);
-    tft.print("us\n");
-    tft.print("CPU freq: ");
-    tft.print(ESP.getCpuFreqMHz());
-    tft.print("MHz\n");
+    tft.print("Xerxes display v1.0.0\n");
+    tft.printf("Monitor speed: %d\n", __MONITOR_SPEED);
+    tft.printf("Xerxes baud: %d\n", __XERXES_BAUD_RATE);
+    tft.printf("Xerxes timeout: %dus\n", _XERXES_TIMEOUT_US);
+    tft.printf("CPU freq: %dMHz\n", ESP.getCpuFreqMHz());
 
+    /*
     // wait for button press
     tft.print("Press button to start");
     while (digitalRead(PIN_BUTTON_1) == HIGH)
     {
         delay(10);
     }
+    */
 
     discoverXerxesDevices(devices, 0x00, 0x1F);
 }
 
 void loop()
 {
-    if (millis() > targetTime)
+    if (devices.size() == 0)
     {
-        esp_adc_cal_characteristics_t adc_chars;
-
-        // Get the internal calibration value of the chip
-        esp_adc_cal_value_t val_type = esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, 1100, &adc_chars);
-        uint32_t raw = analogRead(PIN_BAT_VOLT);
-        uint32_t v1 = esp_adc_cal_raw_to_voltage(raw, &adc_chars) * 2; // The partial pressure is one-half
-
         tft.fillScreen(TFT_BLACK);
         tft.setCursor(0, 0);
-
-        // If the battery is not connected, the ADC detects the charging voltage of TP4056, which is inaccurate.
-        // Can judge whether it is greater than 4300mV. If it is less than this value, it means the battery exists.
-        if (v1 > 4300)
-        {
-            tft.print("No battery connect!");
-            tft.drawCentreString("Font size 4", 80, 30, 4); // Draw text centre at position 80, 24 using font 4
-            ESP_LOGI("loop", "No battery connect!");
-        }
-        else
-        {
-            tft.print(v1);
-            tft.print("mV");
-            ESP_LOGI("loop", "Battery voltage: %dmV", v1);
-        }
-        targetTime = millis() + 1000;
+        tft.drawString("No devices found", 0, 0, 4);
+        delay(1000);
+        discoverXerxesDevices(devices, 0x00, 0x1F);
     }
-    delay(20);
+
+    int y_offset = 0;
+    for (auto &device : devices)
+    {
+        bool status = false;
+        float pv0 = 0;
+        float pv1 = 0;
+        float pv2 = 0;
+        float pv3 = 0;
+        status |= readSafe(pv0, device, MEAN_PV0_OFFSET);
+        status |= readSafe(pv1, device, MEAN_PV1_OFFSET);
+        status |= readSafe(pv2, device, MEAN_PV2_OFFSET);
+        status |= readSafe(pv3, device, MEAN_PV3_OFFSET);
+
+        if (status)
+        {
+            tft.fillScreen(TFT_BLACK);
+            tft.setCursor(0, 0);
+            tft.drawString("[" + String(device) + "]", 0, y_offset, _FONT_SIZE);
+            tft.drawString(String(pv0, 1), 80, y_offset, _FONT_SIZE);
+            tft.drawString(String(pv1, 1), 160, y_offset, _FONT_SIZE);
+            // tft.drawString(String(pv2, 1), 180, y_offset, _FONT_SIZE);
+            tft.drawString(String(pv3, 1), 240, y_offset, _FONT_SIZE);
+        }
+
+        y_offset += 20;
+    }
+    delay(200);
+
+    // go to sleep after 5 minutes
+    if (millis() > 300000)
+    {
+        ESP_LOGI("loop", "Going to sleep");
+        esp_deep_sleep_start();
+    }
 }
 
 // TFT Pin check
@@ -232,9 +263,6 @@ void loop()
     TFT_BACKLIGHT_ON != HIGH || \
     170 != TFT_WIDTH ||         \
     320 != TFT_HEIGHT
-#error "Error! Please make sure <User_Setups/Setup206_LilyGo_T_Display_S3.h> is selected in <TFT_eSPI/User_Setup_Select.h>"
-#error "Error! Please make sure <User_Setups/Setup206_LilyGo_T_Display_S3.h> is selected in <TFT_eSPI/User_Setup_Select.h>"
-#error "Error! Please make sure <User_Setups/Setup206_LilyGo_T_Display_S3.h> is selected in <TFT_eSPI/User_Setup_Select.h>"
 #error "Error! Please make sure <User_Setups/Setup206_LilyGo_T_Display_S3.h> is selected in <TFT_eSPI/User_Setup_Select.h>"
 #endif
 
