@@ -179,12 +179,21 @@ void setup()
     ledcWrite(0, 255);
     ESP_LOGI("setup", "Backlight on");
 
+    // measure battery voltage on pin 4
+    esp_adc_cal_characteristics_t adc_chars;
+    esp_adc_cal_value_t val_type = esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, 1100, &adc_chars);
+    uint32_t raw = analogRead(PIN_BAT_VOLT);
+    uint32_t v1 = esp_adc_cal_raw_to_voltage(raw, &adc_chars) * 2; // The partial voltage is one-half
+
     // print all definitions:
-    tft.printf("Xerxes display %s\n", __VERSION);
+    tft.print("Xerxes display ");
+    tft.print(String(__VERSION));
     tft.printf("Monitor speed: %d\n", __MONITOR_SPEED);
     tft.printf("Xerxes baud: %d\n", __XERXES_BAUD_RATE);
     tft.printf("Xerxes timeout: %dus\n", _XERXES_TIMEOUT_US);
     tft.printf("CPU freq: %dMHz\n", ESP.getCpuFreqMHz());
+    tft.printf("Battery voltage: %dmV\n\n", v1);
+    delay(1000);
 
     /*
     // wait for button press
@@ -222,18 +231,33 @@ void loop()
         status |= readSafe(pv2, device, MEAN_PV2_OFFSET);
         status |= readSafe(pv3, device, MEAN_PV3_OFFSET);
 
-        if (status)
+        // is device first in list?
+        if (device == devices[0])
         {
             tft.fillScreen(TFT_BLACK);
             tft.setCursor(0, 0);
+            tft.drawString("Device", 0, 0, _FONT_SIZE);
+            tft.drawString("PV0", 80, 0, _FONT_SIZE);
+            tft.drawString("PV1", 160, 0, _FONT_SIZE);
+            // tft.drawString("PV2", 180, 0, _FONT_SIZE);
+            tft.drawString("PV3", 240, 0, _FONT_SIZE);
+            y_offset = 30;
+        }
+        if (status)
+        {
             tft.drawString("[" + String(device) + "]", 0, y_offset, _FONT_SIZE);
             tft.drawString(String(pv0, 1), 80, y_offset, _FONT_SIZE);
             tft.drawString(String(pv1, 1), 160, y_offset, _FONT_SIZE);
             // tft.drawString(String(pv2, 1), 180, y_offset, _FONT_SIZE);
             tft.drawString(String(pv3, 1), 240, y_offset, _FONT_SIZE);
         }
+        else
+        {
+            tft.drawString("[" + String(device) + "]", 0, y_offset, _FONT_SIZE);
+            tft.drawString("Error", 80, y_offset, _FONT_SIZE);
+        }
 
-        y_offset += 20;
+        y_offset += 30;
     }
     delay(200);
 
