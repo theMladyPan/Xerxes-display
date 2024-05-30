@@ -11,7 +11,7 @@
 
 #include "DeviceIds.h"
 #include "Protocol.hpp"
-#include "EspUart.hpp"
+#include "esp32/EspUart.hpp"
 #include "MessageId.h"
 #include "Master.hpp"
 #include "Leaf.hpp"
