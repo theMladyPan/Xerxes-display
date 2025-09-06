@@ -17,13 +17,13 @@
 #include "Leaf.hpp"
 #include "MemoryMap.h"
 
-#if CORE_DEBUG_LEVEL > 1
-constexpr uint32_t _XERXES_TIMEOUT_US = (1e9 / __XERXES_BAUD_RATE) + 2e4;
+#if CORE_DEBUG_LEVEL > 3
+constexpr uint32_t _XERXES_TIMEOUT_US = 30000;
 #else
-constexpr uint32_t _XERXES_TIMEOUT_US = (1e9 / __XERXES_BAUD_RATE);
+constexpr uint32_t _XERXES_TIMEOUT_US = 20000;
 #endif
 
-#define _FONT_SIZE 4
+#define _FONT_SIZE 2
 
 constexpr uint8_t _pin_tx = 17;
 constexpr uint8_t _pin_rx = 18;
@@ -70,7 +70,7 @@ lcd_cmd_t lcd_st7789v[] = {
 
 auto devices = std::vector<uint8_t>();
 
-int discoverXerxesDevices(std::vector<uint8_t> &devices, uint8_t range_min = 0, uint8_t range_max = 0x1F)
+int discoverXerxesDevices(std::vector<uint8_t> &devices, uint8_t range_min = 0, uint8_t range_max = 127)
 {
     int ret = 0; // amount of devices found
     ping_reply_t ping_reply;
@@ -195,7 +195,7 @@ void setup()
     tft.printf("Battery voltage: %dmV\n\n", v1);
     delay(2000);
 
-    discoverXerxesDevices(devices, 0x00, 0x1F);
+    discoverXerxesDevices(devices, 0x00);
 }
 
 void loop()
@@ -206,7 +206,7 @@ void loop()
         tft.setCursor(0, 0);
         tft.drawString("No devices found", 0, 0, 4);
         delay(1000);
-        discoverXerxesDevices(devices, 0x00, 0x1F);
+        discoverXerxesDevices(devices, 0x00);
     }
 
     int y_offset = 0;
@@ -228,18 +228,18 @@ void loop()
             tft.fillScreen(TFT_BLACK);
             tft.setCursor(0, 0);
             tft.drawString("Device", 0, 0, _FONT_SIZE);
-            tft.drawString("PV0", 80, 0, _FONT_SIZE);
-            tft.drawString("PV1", 160, 0, _FONT_SIZE);
-            // tft.drawString("PV2", 180, 0, _FONT_SIZE);
+            tft.drawString("PV0", 60, 0, _FONT_SIZE);
+            tft.drawString("PV1", 120, 0, _FONT_SIZE);
+            tft.drawString("PV2", 180, 0, _FONT_SIZE);
             tft.drawString("PV3", 240, 0, _FONT_SIZE);
-            y_offset = 30;
+            y_offset = 20;
         }
         if (status)
         {
             tft.drawString("[" + String(device) + "]", 0, y_offset, _FONT_SIZE);
-            tft.drawString(String(pv0, 1), 80, y_offset, _FONT_SIZE);
-            tft.drawString(String(pv1, 1), 160, y_offset, _FONT_SIZE);
-            // tft.drawString(String(pv2, 1), 180, y_offset, _FONT_SIZE);
+            tft.drawString(String(pv0, 1), 60, y_offset, _FONT_SIZE);
+            tft.drawString(String(pv1, 1), 120, y_offset, _FONT_SIZE);
+            tft.drawString(String(pv2, 1), 180, y_offset, _FONT_SIZE);
             tft.drawString(String(pv3, 1), 240, y_offset, _FONT_SIZE);
         }
         else
@@ -248,9 +248,9 @@ void loop()
             tft.drawString("Error", 80, y_offset, _FONT_SIZE);
         }
 
-        y_offset += 30;
+        y_offset += 20;
     }
-    delay(200);
+    delay(1000);
 
     // go to sleep after 5 minutes
     if (millis() > 300000)
